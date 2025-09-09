@@ -3,6 +3,8 @@ import "./ConferenceEvent.css"; // CSS file for styling
 import TotalCost from "./TotalCost"; // Component for showing total cost details
 import { useSelector, useDispatch } from "react-redux"; // Redux hooks
 import { incrementQuantity, decrementQuantity } from "./venueSlice"; // Redux actions
+import { incrementAvQuantity, decrementAvQuantity } from "./avSlice";
+import { toggleMealSelection } from "./mealsSlice";
 
 // =======================
 // Main Conference Event Component
@@ -12,13 +14,14 @@ const ConferenceEvent = () => {
   // State hooks
   // -----------------------
   const [showItems, setShowItems] = useState(false); // Toggles between "details" view and "selection" view
-  const [numberOfPeople, setNumberOfPeople] = useState(1); // Placeholder for people count (unused for now)
+  const [numberOfPeople, setNumberOfPeople] = useState(1); // Placeholder for people count 
 
   // -----------------------
   // Redux state & dispatch
   // -----------------------
-  const venueItems = useSelector((state) => state.venue); // Venue-related items from Redux store
-  const avItems = useSelector((state) => state.av); // AV-related items from Redux store
+  const venueItems = useSelector((state) => state.venue); // The useSelector() function retrieves venue items from the Redux store state
+  const avItems = useSelector((state) => state.avg); // AV-related items from Redux store
+  const mealsItems = useSelector((state) => state.meals);
   const dispatch = useDispatch();
 
   // Restrict auditorium booking to 3 max
@@ -26,7 +29,7 @@ const ConferenceEvent = () => {
     3 - venueItems.find((item) => item.name === "Auditorium Hall (Capacity:200)").quantity;
 
   // -----------------------
-  // Handlers
+  // EVENT Handlers
   // -----------------------
   const handleToggleItems = () => {
     console.log("handleToggleItems called");
@@ -41,31 +44,71 @@ const ConferenceEvent = () => {
     ) {
       return;
     }
+    /*
+    The dispatch call fires off an action to Redux, telling it “Hey, increase the quantity of the venue at this index.”
+    Redux then updates the state accordingly, and React re-renders with the new state.*/
     dispatch(incrementQuantity(index));
   };
 
   const handleRemoveFromCart = (index) => {
     if (venueItems[index].quantity > 0) {
-      dispatch(decrementQuantity(index));
+      dispatch(decrementQuantity(index)); 
     }
   };
 
   //  AV and Meals 
   const handleIncrementAvQuantity = (index) => {
+    if(avItems){
+        dispatch(incrementAvQuantity(index));
+    }
    
     }
-  };
+  
   const handleDecrementAvQuantity = (index) => {
-   
+    if(avItems[index].quantity > 0){
+        dispatch(decrementAvQuantity(index));
+    }
   };
 
-  const handleMealSelection = (index) => {};
+  const handleMealSelection = (index) => {
+    const item = mealsItems[index];
+    if (item.selected && item.type === "mealForPeople") {
+        // Ensure numberOfPeople is set before toggling selection
+        const newNumberOfPeople = item.selected ? numberOfPeople : 0;
+        dispatch(toggleMealSelection(index, newNumberOfPeople));
+    }
+    else {
+        dispatch(toggleMealSelection(index));
+    }
+  };
 
   // -----------------------
   // Utility functions
   // -----------------------
   const getItemsFromTotalCost = () => {
     const items = [];
+    venueItems.forEach((item) => {
+      if (item.quantity > 0) {
+        items.push({ ...item, type: "venue" });
+      }
+    });
+    avItems.forEach((item) => {
+      if (
+        item.quantity > 0 &&
+        !items.some((i) => i.name === item.name && i.type === "av")
+      ) {
+        items.push({ ...item, type: "av" });
+      }
+    });
+    mealsItems.forEach((item) => {
+      if (item.selected) {
+        const itemForDisplay = { ...item, type: "meals" };
+        if (item.numberOfPeople) {
+          itemForDisplay.numberOfPeople = numberOfPeople;
+        }
+        items.push(itemForDisplay);
+      }
+    });
     return items;
   };
 
@@ -75,12 +118,35 @@ const ConferenceEvent = () => {
       venueItems.forEach((item) => {
         totalCost += item.cost * item.quantity;
       });
+    }else if(section === "avg"){
+        avItems.forEach((item => {
+            totalCost += item.cost * item.quantity;
+        }));
+    }else if(section === "meals"){
+        mealsItems.forEach((item) => {
+            if (item.selected) {
+              totalCost += item.cost * numberOfPeople;
+            }
+          });
     }
     return totalCost;
   };
 
   // Venue total cost
   const venueTotalCost = calculateTotalCost("venue");
+
+  // Average total cost
+  const avTotalCost = calculateTotalCost("avg");
+
+  // Meals total cost
+  const mealsTotalCost = calculateTotalCost("meals");
+
+  // Overall Total cost
+  const totalCosts = {
+    venue: venueTotalCost,
+    avg: avTotalCost,
+    meals: mealsTotalCost,
+};
 
   // Navigation to sections (Venue, Add-ons, Meals)
   const navigateToProducts = (idType) => {
@@ -92,17 +158,50 @@ const ConferenceEvent = () => {
   };
 
   // -----------------------
-  // Component placeholders
+  // Get Total Cost
   // -----------------------
   const items = getItemsFromTotalCost();
 
-  const ItemsDisplay = ({ items }) => {
-    // Placeholder: renders selected items in details view
-    return <div>{/* TODO: Display items summary */}</div>;
+  // Component to display Items. TODO; Create a separate component for this items
+  const ItemsDisplay = ({ items }) => {    
+    console.log(items);
+    return 
+    <>
+        <div className="display_box1">
+            {items.length === 0 && <p>No items selected</p>}
+            <table className="table_item_data">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Unit Cost</th>
+                        <th>Quantity</th>
+                        <th>Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {items.map((item, index) => (
+                        <tr key={index}>
+                            <td>{item.name}</td>
+                            <td>${item.cost}</td>
+                            <td>
+                                {item.type === "meals" || item.numberOfPeople
+                                ? ` For ${numberOfPeople} people`
+                                : item.quantity}
+                            </td>
+                            <td>{item.type === "meals" || item.numberOfPeople
+                                ? `${item.cost * numberOfPeople}`
+                                : `${item.cost * item.quantity}`}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    </>;
   };
 
   // -----------------------
-  // JSX
+  // JSX Layouts
   // -----------------------
   return (
     <>
@@ -132,7 +231,7 @@ const ConferenceEvent = () => {
 
       {/* Main Container */}
       <div className="main_container">
-        {!showItems ? (
+        {!showItems ? (  //  variable to toggle functionality
           // -------------------
           // Selection Mode
           // -------------------
@@ -230,8 +329,23 @@ const ConferenceEvent = () => {
               <div className="text">
                 <h1>Add-ons Selection</h1>
               </div>
-              <div className="addons_selection"></div>
-              <div className="total_cost">Total Cost:</div>
+              <div className="addons_selection">
+                {avItems.map((item, index) => (
+                    <div className="av_data venue_main" key={index}>
+                        <div className="img">
+                            <img src={item.img} alt={item.name} />
+                        </div>
+                        <div className="text"> {item.name} </div>
+                        <div> ${item.cost} </div>
+                        <div className="addons_btn">
+                            <button className="btn-warning" onClick={() => handleDecrementAvQuantity(index)}> &ndash; </button>
+                            <span className="quantity-value">{item.quantity}</span>
+                            <button className=" btn-success" onClick={() => handleIncrementAvQuantity(index)}> &#43; </button>
+                        </div>
+                    </div>
+                ))}
+              </div>
+              <div className="total_cost">Total Cost:{avTotalCost}</div>
             </div>
 
             {/* Meals Section */}
@@ -239,26 +353,43 @@ const ConferenceEvent = () => {
               <div className="text">
                 <h1>Meals Selection</h1>
               </div>
-              <div className="input-container venue_selection"></div>
-              <div className="meal_selection"></div>
-              <div className="total_cost">Total Cost:</div>
+              <div className="input-container venue_selection">
+                    <label htmlFor="numberOfPeople"><h3>Number of People:</h3></label>
+                    <input type="number" className="input_box5" id="numberOfPeople" value={numberOfPeople}
+                    onChange={(e) => setNumberOfPeople(parseInt(e.target.value))}
+                    min="1" />
+              </div>
+              <div className="meal_selection">
+                    {
+                        mealsItems.map((item, index) => (
+                            <div className="meal_item" key={index} style={{ padding: 15 }}>
+                                <div className="inner">
+                                    <input type="checkbox" id={ `meal_${index}` } checked={item.selected} 
+                                      onChange={() => handleMealSelection(index)} />
+                                    <label htmlFor={`meal_${index}`}> {item.name}</label>
+                                </div>
+                                <div className="meal_cost">${item.cost}</div>
+                            </div>
+                        ))
+                    }
+              </div>
+
+              <div className="total_cost">Total Cost: {mealsTotalCost}</div>
             </div>
           </div>
         ) : (
           // -------------------
           // Details Mode
           // -------------------
-          <div className="total_amount_detail">
-            <TotalCost
-              totalCosts={venueTotalCost} // FIX: likely should be totalCosts object
-              handleClick={handleToggleItems}
-              ItemsDisplay={() => <ItemsDisplay items={items} />}
-            />
+          <div className="total_amount_detail">            
+              <TotalCost totalCosts={ totalCosts } ItemsDisplay={() => <ItemsDisplay items={ items } />} />             
           </div>
         )}
       </div>
     </>
   );
 };
+
+
 
 export default ConferenceEvent;
